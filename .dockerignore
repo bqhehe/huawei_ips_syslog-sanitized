@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# 项目
+*.log
+*.txt
+!requirements.txt
+.git
+.gitignore
+.vscode
+.idea
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 数据
+data/Att.txt
+data/blacklist.json
+
+# 日志
+logs/*.log
+!logs/.gitkeep
+
+# 配置
+.env
+.env.local

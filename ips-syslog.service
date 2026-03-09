@@ -1,0 +1,34 @@
+[Unit]
+Description=IPS Syslog Auto Response Service
+Documentation=https://github.com/your-repo/ips-syslog
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/python-code/python_ips_syslog
+Environment="PATH=/opt/python-code/python_ips_syslog/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONPATH=/opt/python-code/python_ips_syslog:/opt/python-code/python_ips_syslog/venv/lib/python3.11/site-packages"
+ExecStart=/usr/bin/python3 /opt/python-code/python_ips_syslog/core/syslog_to_huawei_ips.py
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStop=/bin/kill -TERM $MAINPID
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/python-code/python_ips_syslog/logs/service.log
+StandardError=append:/opt/python-code/python_ips_syslog/logs/service.log
+
+# 安全设置
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/python-code/python_ips_syslog/logs /opt/python-code/python_ips_syslog/data
+
+# 资源限制
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

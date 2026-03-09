@@ -1,0 +1,2897 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPS Syslog 自动响应系统</title>
+    <link rel="stylesheet" href="/static/dashboard.css?v=202603022237">
+    <link rel="stylesheet" href="/static/analysis.css?v=20260309">
+    <!-- ECharts 图表库 -->
+    <script src="/static/echarts.min.js?v=202603022237"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>IPS Syslog 自动响应系统</h1>
+                <p>华为防火墙IPS告警自动响应与黑名单管理系统</p>
+            </div>
+            <button class="logout-btn" onclick="logout()">退出登录</button>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('dashboard')">仪表板</button>
+            <button class="tab" onclick="showTab('whitelist')">白名单管理</button>
+            <button class="tab" onclick="showTab('blacklist')">黑名单管理</button>
+            <button class="tab" onclick="showTab('alerts')">告警详情</button>
+            <button class="tab" onclick="showTab('geo-map')">来源地图</button>
+            <button class="tab" onclick="showTab('analysis')">分析中心</button>
+            <button class="tab" onclick="showTab('logs')">实时日志</button>
+            <button class="tab" onclick="showTab('monitoring')">监控指标</button>
+            <button class="tab" onclick="showTab('audit')">审计日志</button>
+            <button class="tab" onclick="showTab('account')">账户设置</button>
+        </div>
+
+        <!-- 仪表板标签页 -->
+        <div id="dashboard" class="tab-content active">
+            <div class="stats-grid">
+                <!-- 黑名单统计 -->
+                <div class="stat-card total">
+                    <h3>黑名单总数</h3>
+                    <div class="value" id="total-count">-</div>
+                </div>
+                <div class="stat-card active">
+                    <h3>活跃IP</h3>
+                    <div class="value" id="active-count">-</div>
+                </div>
+                <div class="stat-card expired">
+                    <h3>过期IP</h3>
+                    <div class="value" id="expired-count">-</div>
+                </div>
+                <div class="stat-card permanent">
+                    <h3>永久封禁</h3>
+                    <div class="value" id="permanent-count">-</div>
+                </div>
+                <!-- 告警统计 -->
+                <div class="stat-card total">
+                    <h3>告警总数</h3>
+                    <div class="value" id="total-alerts">-</div>
+                </div>
+                <div class="stat-card received">
+                    <h3>今日告警</h3>
+                    <div class="value" id="today-alerts">-</div>
+                </div>
+                <div class="stat-card blocked">
+                    <h3>本周告警</h3>
+                    <div class="value" id="week-alerts">-</div>
+                </div>
+                <div class="stat-card permanent">
+                    <h3>本月告警</h3>
+                    <div class="value" id="month-alerts">-</div>
+                </div>
+                <div class="stat-card alerted">
+                    <h3>高危告警</h3>
+                    <div class="value" id="critical-alerts">-</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>📊 告警分布</h2>
+                <div class="monitoring-grid">
+                    <div class="chart-container">
+                        <h3>按严重性分布</h3>
+                        <div class="chart" id="severity-chart"></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>按攻击类型分布（Top 10）</h3>
+                        <div class="chart" id="attack-chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 白名单管理标签页 -->
+        <div id="whitelist" class="tab-content">
+            <div class="section">
+                <h2>🛡️ 白名单管理</h2>
+                <p style="color: #666; margin-bottom: 20px;">
+                    白名单中的IP地址或网段将不会被系统自动封禁。支持单个IP（如 192.168.1.1）和CIDR网段（如 192.168.1.0/24）。
+                </p>
+                <div class="input-group">
+                    <input type="text" id="whitelist-ip-input" placeholder="输入IP地址或网段（如 192.168.1.0/24）" style="flex: 2;">
+                    <input type="text" id="whitelist-desc-input" placeholder="描述（可选）" style="flex: 1;">
+                    <button class="btn btn-success" onclick="addWhitelistIP()">添加到白名单</button>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="loadWhitelist()">刷新列表</button>
+                    <button class="btn btn-info" onclick="importWhitelistFromConfig()">从配置文件导入</button>
+                </div>
+                <div class="table-container">
+                    <table id="whitelist-table">
+                        <thead>
+                            <tr>
+                                <th>IP/网段</th>
+                                <th>描述</th>
+                                <th>类型</th>
+                                <th>添加时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="5" class="loading">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 黑名单管理标签页 -->
+        <div id="blacklist" class="tab-content">
+            <div class="section">
+                <h2>📋 黑名单管理</h2>
+                <div class="input-group">
+                    <input type="text" id="ip-input" placeholder="输入IP地址">
+                    <input type="number" id="expire-input" placeholder="过期时间（小时，0=永久）" value="24">
+                    <button class="btn btn-primary" onclick="addIP()">添加IP</button>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="loadBlacklist()">刷新列表</button>
+                    <button class="btn btn-danger" onclick="cleanupExpired()">清理过期IP</button>
+                </div>
+                <div class="table-container">
+                    <table id="blacklist-table">
+                        <thead>
+                            <tr>
+                                <th>IP地址</th>
+                                <th>添加时间</th>
+                                <th>过期时间</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="5" class="loading">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 告警详情标签页 -->
+        <div id="alerts" class="tab-content">
+            <div class="section">
+                <h2>🚨 Syslog告警接收详情</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="loadAlerts()">刷新告警</button>
+                    <select id="alert-count" style="margin-left: 10px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" onchange="loadAlerts()">
+                        <option value="20">显示最近 20 条</option>
+                        <option value="50" selected>显示最近 50 条</option>
+                        <option value="100">显示最近 100 条</option>
+                        <option value="200">显示最近 200 条</option>
+                    </select>
+                </div>
+                <div class="table-container">
+                    <table id="alerts-table">
+                        <thead>
+                            <tr>
+                                <th>告警时间</th>
+                                <th>记录时间</th>
+                                <th>源IP</th>
+                                <th>地理位置</th>
+                                <th>目的IP</th>
+                                <th>协议</th>
+                                <th>端口</th>
+                                <th>攻击类型</th>
+                                <th>严重性</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="9" class="loading">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 来源地图标签页 -->
+        <div id="geo-map" class="tab-content">
+            <div class="section">
+                <h2>🌍 攻击来源地理分布</h2>
+                <p style="color: #666; margin-bottom: 20px;">
+                    可视化展示攻击来源的全球地理分布，帮助快速识别威胁来源地区。
+                </p>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="loadGeoMap()">刷新地图</button>
+                    <select id="geo-time-range" style="margin-left: 10px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" onchange="loadGeoMap()">
+                        <option value="100">最近 100 条</option>
+                        <option value="500">最近 500 条</option>
+                        <option value="1000" selected>最近 1000 条</option>
+                        <option value="1500">最近 1500 条 (全部)</option>
+                    </select>
+                </div>
+                <div class="monitoring-grid">
+                    <div class="chart-container" style="grid-column: 1 / -1;">
+                        <h3>世界地图热力分布</h3>
+                        <div class="chart" id="world-map" style="height: 500px;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="section">
+                <h3>📊 Top 攻击来源国家/地区</h3>
+                <div class="monitoring-grid">
+                    <div class="chart-container">
+                        <h3>按国家分布 (Top 10)</h3>
+                        <div class="chart" id="country-chart"></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>按城市分布 (Top 10)</h3>
+                        <div class="chart" id="city-chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 监控指标标签页 -->
+        <div id="monitoring" class="tab-content">
+            <div class="section">
+                <h2>📈 Prometheus指标</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="loadMetrics()">刷新指标</button>
+                    <button class="btn btn-primary" onclick="downloadPrometheusMetrics()">下载Prometheus格式</button>
+                </div>
+                <div class="table-container">
+                    <pre id="metrics-content" style="background: #f8f9fa; padding: 20px; border-radius: 8px; overflow-x: auto;">加载中...</pre>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>📊 指标统计表</h2>
+                <div class="table-container">
+                    <table class="metrics-table">
+                        <thead>
+                            <tr>
+                                <th>指标名称</th>
+                                <th>数值</th>
+                                <th>说明</th>
+                            </tr>
+                        </thead>
+                        <tbody id="metrics-table-body">
+                            <tr><td colspan="3" class="loading">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 实时日志标签页 -->
+        <div id="logs" class="tab-content">
+            <div class="section">
+                <h2>📡 实时日志接收</h2>
+                <p style="color: #666; font-size: 14px; margin-top: -10px; margin-bottom: 20px;">只实时显示最新 100 条日志</p>
+                <div class="stats-grid" style="margin-bottom: 20px;">
+                    <div class="stat-card">
+                        <h3>日志总数</h3>
+                        <div class="value" id="log-buffer-total">-</div>
+                    </div>
+                    <div class="stat-card logs">
+                        <h3>IPS日志</h3>
+                        <div class="value" id="log-buffer-ips">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>SESSION日志</h3>
+                        <div class="value" id="log-buffer-session">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>其他日志</h3>
+                        <div class="value" id="log-buffer-other">-</div>
+                    </div>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="loadRealtimeLogs()">刷新日志</button>
+                    <select id="log-type-filter" onchange="loadRealtimeLogs()" style="padding: 10px; border-radius: 8px; border: 1px solid #ddd;">
+                        <option value="">全部类型</option>
+                        <option value="IPS">仅IPS告警</option>
+                        <option value="SESSION">仅会话日志</option>
+                        <option value="OTHER">其他日志</option>
+                    </select>
+                    <label style="margin-left: 20px;">
+                        <input type="checkbox" id="auto-refresh" onchange="toggleAutoRefresh()"> 自动刷新 (5秒)
+                    </label>
+                </div>
+                <div class="table-container">
+                    <table id="logs-table">
+                        <thead>
+                            <tr>
+                                <th>时间</th>
+                                <th>类型</th>
+                                <th>源IP</th>
+                                <th>目的IP</th>
+                                <th>攻击类型</th>
+                                <th>严重性</th>
+                                <th>原始日志</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="7" class="loading">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 审计日志标签页 -->
+        <div id="audit" class="tab-content">
+            <div class="section">
+                <h2>📋 最近审计日志</h2>
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="loadAuditLogs()">刷新日志</button>
+                </div>
+                <div class="table-container">
+                    <table id="audit-table">
+                        <thead>
+                            <tr>
+                                <th>时间</th>
+                                <th>事件类型</th>
+                                <th>IP地址</th>
+                                <th>详情</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="4" class="loading">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 账户设置标签页 -->
+        <div id="account" class="tab-content">
+            <!-- 设置页面标题 -->
+            <div style="margin-bottom: 24px;">
+                <h1 style="font-size: 24px; color: #333; margin: 0;">系统设置</h1>
+                <p style="color: #666; margin: 8px 0 0 0;">管理账户密码、防火墙连接和通知方式</p>
+            </div>
+
+            <!-- 两列布局 -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+
+                <!-- 左列：账户与安全 -->
+                <div>
+                    <!-- 账户安全卡片 -->
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <span class="settings-icon">🔐</span>
+                            <h3>账户安全</h3>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="form-item">
+                                <label>当前密码</label>
+                                <input type="password" id="old-password" placeholder="请输入当前密码">
+                            </div>
+                            <div class="form-item">
+                                <label>新密码</label>
+                                <input type="password" id="new-password" placeholder="至少6位字符">
+                            </div>
+                            <div class="form-item">
+                                <label>确认新密码</label>
+                                <input type="password" id="confirm-password" placeholder="再次输入新密码">
+                            </div>
+                            <button class="btn btn-primary" onclick="changePassword()" style="width: 100%; margin-top: 8px;">
+                                修改密码
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 防火墙配置卡片 -->
+                    <div class="settings-card" style="margin-top: 24px;">
+                        <div class="settings-card-header">
+                            <span class="settings-icon">🔥</span>
+                            <h3>防火墙连接</h3>
+                            <span class="settings-badge" id="firewall-status">未连接</span>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="form-item">
+                                <label>防火墙地址</label>
+                                <input type="text" id="fw-ip" placeholder="例如: 192.168.1.1">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-item" style="flex: 1;">
+                                    <label>SSH用户名</label>
+                                    <input type="text" id="fw-username" placeholder="用户名">
+                                </div>
+                            </div>
+                            <div class="form-item">
+                                <label>SSH密码</label>
+                                <input type="password" id="fw-password" placeholder="留空则不修改">
+                            </div>
+                            <div class="form-actions">
+                                <button class="btn btn-primary" onclick="updateFirewallConfig()">保存配置</button>
+                                <button class="btn btn-secondary" onclick="testFirewallConnection()">测试连接</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右列：通知配置 -->
+                <div>
+                    <div class="settings-card">
+                        <div class="settings-card-header">
+                            <span class="settings-icon">📢</span>
+                            <h3>通知方式</h3>
+                        </div>
+                        <div class="settings-card-body">
+                            <!-- 通知渠道标签页 -->
+                            <div class="notification-tabs">
+                                <button class="notify-tab active" data-channel="wechat" onclick="switchNotifyTab('wechat')">
+                                    <span class="notify-icon">💬</span>
+                                    企业微信
+                                </button>
+                                <button class="notify-tab" data-channel="dingtalk" onclick="switchNotifyTab('dingtalk')">
+                                    <span class="notify-icon">📠</span>
+                                    钉钉
+                                </button>
+                                <button class="notify-tab" data-channel="feishu" onclick="switchNotifyTab('feishu')">
+                                    <span class="notify-icon">📱</span>
+                                    飞书
+                                </button>
+                                <button class="notify-tab" data-channel="email" onclick="switchNotifyTab('email')">
+                                    <span class="notify-icon">📧</span>
+                                    邮件
+                                </button>
+                            </div>
+
+                            <!-- 企业微信配置 -->
+                            <div class="notify-config active" id="notify-wechat">
+                                <div class="form-item">
+                                    <label style="display: flex; align-items: center; justify-content: space-between;">
+                                        <span>启用企业微信通知</span>
+                                        <label class="switch">
+                                            <input type="checkbox" id="wechat-enabled">
+                                            <span class="slider"></span>
+                                        </label>
+                                    </label>
+                                </div>
+                                <div class="form-item">
+                                    <label>Webhook URL</label>
+                                    <input type="text" id="wechat-webhook" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx">
+                                </div>
+                                <div class="form-actions">
+                                    <button class="btn btn-primary" onclick="updateNotificationConfig('wechat')">保存</button>
+                                    <button class="btn btn-test" onclick="testNotification('wechat')">发送测试</button>
+                                </div>
+                            </div>
+
+                            <!-- 钉钉配置 -->
+                            <div class="notify-config" id="notify-dingtalk">
+                                <div class="form-item">
+                                    <label style="display: flex; align-items: center; justify-content: space-between;">
+                                        <span>启用钉钉通知</span>
+                                        <label class="switch">
+                                            <input type="checkbox" id="dingtalk-enabled">
+                                            <span class="slider"></span>
+                                        </label>
+                                    </label>
+                                </div>
+                                <div class="form-item">
+                                    <label>Webhook URL</label>
+                                    <input type="text" id="dingtalk-webhook" placeholder="https://oapi.dingtalk.com/robot/send?access_token=xxx">
+                                </div>
+                                <div class="form-item">
+                                    <label>签名密钥（可选）</label>
+                                    <input type="text" id="dingtalk-secret" placeholder="SEC开头的签名密钥">
+                                </div>
+                                <div class="form-actions">
+                                    <button class="btn btn-primary" onclick="updateNotificationConfig('dingtalk')">保存</button>
+                                    <button class="btn btn-test" onclick="testNotification('dingtalk')">发送测试</button>
+                                </div>
+                            </div>
+
+                            <!-- 飞书配置 -->
+                            <div class="notify-config" id="notify-feishu">
+                                <div class="form-item">
+                                    <label style="display: flex; align-items: center; justify-content: space-between;">
+                                        <span>启用飞书通知</span>
+                                        <label class="switch">
+                                            <input type="checkbox" id="feishu-enabled">
+                                            <span class="slider"></span>
+                                        </label>
+                                    </label>
+                                </div>
+                                <div class="form-item">
+                                    <label>Webhook URL</label>
+                                    <input type="text" id="feishu-webhook" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/xxx">
+                                </div>
+                                <div class="form-actions">
+                                    <button class="btn btn-primary" onclick="updateNotificationConfig('feishu')">保存</button>
+                                    <button class="btn btn-test" onclick="testNotification('feishu')">发送测试</button>
+                                </div>
+                            </div>
+
+                            <!-- 邮件配置 -->
+                            <div class="notify-config" id="notify-email">
+                                <div class="form-item">
+                                    <label style="display: flex; align-items: center; justify-content: space-between;">
+                                        <span>启用邮件通知</span>
+                                        <label class="switch">
+                                            <input type="checkbox" id="email-enabled">
+                                            <span class="slider"></span>
+                                        </label>
+                                    </label>
+                                </div>
+                                <div class="form-item">
+                                    <label>SMTP服务器</label>
+                                    <input type="text" id="email-smtp" placeholder="smtp.example.com">
+                                </div>
+                                <div class="form-item">
+                                    <label>SMTP用户名</label>
+                                    <input type="text" id="email-user" placeholder="user@example.com">
+                                </div>
+                                <div class="form-item">
+                                    <label>SMTP密码</label>
+                                    <input type="password" id="email-password" placeholder="请输入SMTP密码">
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-item" style="flex: 1;">
+                                        <label>发件人</label>
+                                        <input type="text" id="email-sender" placeholder="noreply@example.com">
+                                    </div>
+                                    <div class="form-item" style="flex: 1;">
+                                        <label>收件人</label>
+                                        <input type="text" id="email-recipients" placeholder="多个用逗号分隔">
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button class="btn btn-primary" onclick="updateNotificationConfig('email')">保存</button>
+                                    <button class="btn btn-test" onclick="testNotification('email')">发送测试</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 分析中心标签页 -->
+        <div id="analysis" class="tab-content">
+            <div class="analysis-container">
+                <!-- 时间选择器 -->
+                <div class="time-selector">
+                    <button class="time-btn active" data-hours="24">24小时</button>
+                    <button class="time-btn" data-hours="168">7天</button>
+                    <button class="time-btn" data-hours="720">30天</button>
+                </div>
+
+                <!-- 概览KPI卡片 -->
+                <div class="overview-cards">
+                    <div class="overview-card attacks">
+                        <div class="card-value" id="analysis-total-attacks">-</div>
+                        <div class="card-label">总攻击次数</div>
+                    </div>
+                    <div class="overview-card high-risk">
+                        <div class="card-value" id="analysis-high-risk">-</div>
+                        <div class="card-label">高危事件</div>
+                    </div>
+                    <div class="overview-card attackers">
+                        <div class="card-value" id="analysis-attackers">-</div>
+                        <div class="card-label">活跃攻击源</div>
+                    </div>
+                    <div class="overview-card targets">
+                        <div class="card-value" id="analysis-targets">-</div>
+                        <div class="card-label">被攻击资产</div>
+                    </div>
+                </div>
+
+                <!-- 图表区域 -->
+                <div class="charts-grid">
+                    <div class="chart-card chart-full">
+                        <div class="chart-header">
+                            <div class="chart-title">攻击趋势分析</div>
+                        </div>
+                        <div class="chart-container" id="trend-chart"></div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <div class="chart-title">攻击类型分布</div>
+                        </div>
+                        <div class="chart-container" id="attack-type-chart"></div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <div class="chart-title">时间分布热力图</div>
+                        </div>
+                        <div class="chart-container" id="time-distribution-chart"></div>
+                    </div>
+                </div>
+
+                <!-- TOP攻击源表格 -->
+                <div class="data-table">
+                    <div class="table-header">
+                        <div class="table-title">TOP 攻击源</div>
+                        <button class="btn btn-secondary" onclick="exportAnalysisReport()">导出报告</button>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>源IP</th>
+                                <th>国家/地区</th>
+                                <th>攻击次数</th>
+                                <th>目标数量</th>
+                                <th>攻击类型数</th>
+                                <th>最大严重性</th>
+                                <th>威胁等级</th>
+                            </tr>
+                        </thead>
+                        <tbody id="top-attackers-table">
+                            <tr>
+                                <td colspan="7" style="text-align: center; color: #999;">加载中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- TOP被攻击目标表格 -->
+                <div class="data-table">
+                    <div class="table-header">
+                        <div class="table-title">TOP 被攻击目标</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>目标IP</th>
+                                <th>端口</th>
+                                <th>协议</th>
+                                <th>服务</th>
+                                <th>攻击次数</th>
+                                <th>攻击源数量</th>
+                            </tr>
+                        </thead>
+                        <tbody id="top-targets-table">
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: #999;">加载中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* 设置页面样式 */
+        .settings-card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+
+        .settings-card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 20px 24px;
+            background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+            color: white;
+        }
+
+        .settings-icon {
+            font-size: 24px;
+        }
+
+        .settings-card-header h3 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            flex: 1;
+        }
+
+        .settings-badge {
+            padding: 4px 12px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 12px;
+            font-size: 12px;
+        }
+
+        .settings-badge.active {
+            background: #52c41a;
+        }
+
+        .settings-card-body {
+            padding: 24px;
+        }
+
+        .form-item {
+            margin-bottom: 16px;
+        }
+
+        .form-item label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .form-item input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-item input:focus {
+            outline: none;
+            border-color: #1890ff;
+            box-shadow: 0 0 0 3px rgba(24, 144, 255, 0.1);
+        }
+
+        .form-item input::placeholder {
+            color: #aaa;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 16px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .btn-secondary {
+            padding: 10px 20px;
+            background: #f0f0f0;
+            color: #333;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .btn-test {
+            padding: 10px 20px;
+            background: #f0f9ff;
+            color: #0284c7;
+            border: 1px solid #bae6fd;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .btn-test:hover {
+            background: #e0f2fe;
+        }
+
+        /* 通知配置标签页样式 */
+        .notification-tabs {
+            display: flex;
+            gap: 4px;
+            padding: 4px;
+            background: #f5f5f5;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .notify-tab {
+            flex: 1;
+            padding: 10px 16px;
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #666;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .notify-tab:hover {
+            background: rgba(24, 144, 255, 0.1);
+        }
+
+        .notify-tab.active {
+            background: white;
+            color: #1890ff;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .notify-icon {
+            font-size: 16px;
+        }
+
+        .notify-config {
+            display: none !important;
+        }
+
+        .notify-config.active {
+            display: block !important;
+        }
+
+        /* 开关样式 */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.3s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        .switch input:checked + .slider {
+            background-color: #1890ff;
+        }
+
+        .switch input:checked + .slider:before {
+            transform: translateX(24px);
+        }
+
+        @media (max-width: 768px) {
+            #account .tab-content > div {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+    <script>
+
+        // Toast通知函数
+        function showToast(message, type = 'info') {
+            // 创建toast元素
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+
+            // 添加样式
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 24px;
+                border-radius: 4px;
+                color: white;
+                font-weight: 500;
+                z-index: 10000;
+                animation: slideIn 0.3s ease-out;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            `;
+
+            // 根据类型设置背景色
+            const colors = {
+                success: '#28a745',
+                error: '#dc3545',
+                info: '#17a2b8',
+                warning: '#ffc107'
+            };
+            toast.style.backgroundColor = colors[type] || colors.info;
+
+            // 添加动画样式
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(400px); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(400px); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+
+            // 添加到页面
+            document.body.appendChild(toast);
+
+            // 3秒后自动移除
+            setTimeout(() => {
+                toast.style.animation = 'slideOut 0.3s ease-out';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // 显示加载遮罩
+        function showLoadingOverlay(message = '加载中...') {
+            let overlay = document.getElementById('loading-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'loading-overlay';
+                overlay.className = 'loading-overlay';
+                document.body.appendChild(overlay);
+            }
+            overlay.innerHTML = `
+                <div class="spinner"></div>
+                <span>${message}</span>
+            `;
+            overlay.style.display = 'flex';
+        }
+
+        // 隐藏加载遮罩
+        function hideLoadingOverlay() {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+            }
+        }
+
+        // 转义HTML特殊字符，防止XSS攻击
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.toString().replace(/[&<>"']/g, m => map[m]);
+        }
+
+        // 格式化时间戳（将UTC时间转换为本地时间显示）
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return '-';
+            try {
+                // 将时间字符串转换为ISO格式（确保被解析为UTC）
+                // 格式: "2026-02-28 06:49:19" -> "2026-02-28T06:49:19Z"
+                let dateStr = timestamp.trim();
+                // 替换空格为T，并添加Z表示UTC时间
+                if (dateStr.includes(' ') && !dateStr.includes('T')) {
+                    dateStr = dateStr.replace(' ', 'T') + 'Z';
+                } else if (!dateStr.endsWith('Z')) {
+                    dateStr = dateStr + 'Z';
+                }
+
+                const date = new Date(dateStr);
+                return date.toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+            } catch (e) {
+                console.error('时间解析失败:', timestamp, e);
+                return timestamp;
+            }
+        }
+
+        // 通用fetch包装函数，带错误处理和loading状态
+        async function fetchWithErrorHandling(url, options = {}, successMsg = null, showLoading = false, loadingMsg = '处理中...', timeout = 30000) {
+            if (showLoading) {
+                showLoadingOverlay(loadingMsg);
+            }
+
+            // 确保发送cookies
+            if (!options.credentials) {
+                options.credentials = 'include';
+            }
+
+            // 添加超时控制
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+            options.signal = controller.signal;
+
+            try {
+                const response = await fetch(url, options);
+                clearTimeout(timeoutId);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                if (successMsg) {
+                    showToast(successMsg, 'success');
+                }
+                return response;
+            } catch (error) {
+                clearTimeout(timeoutId);
+                if (error.name === 'AbortError') {
+                    console.error('请求超时:', url);
+                    showToast('操作超时，请稍后重试', 'error');
+                } else {
+                    console.error('请求失败:', error);
+                    showToast(`操作失败: ${error.message}`, 'error');
+                }
+                throw error;
+            } finally {
+                if (showLoading) {
+                    hideLoadingOverlay();
+                }
+            }
+        }
+
+        let currentTab = 'dashboard';
+
+        // 切换标签页
+        function showTab(tabName) {
+            // 清理防火墙状态检查间隔
+            if (firewallStatusInterval) {
+                clearInterval(firewallStatusInterval);
+                firewallStatusInterval = null;
+            }
+
+            // 先移除所有标签和内容的active类
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            // 为当前标签添加active类 - 通过onclick属性查找
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                if (tab.getAttribute('onclick')?.includes(`showTab('${tabName}')`)) {
+                    tab.classList.add('active');
+                }
+            });
+
+            // 为对应内容区域添加active类
+            document.getElementById(tabName).classList.add('active');
+
+            // 更新当前标签
+            currentTab = tabName;
+
+            // 加载对应数据
+            switch (tabName) {
+                case 'dashboard':
+                    loadDashboard();
+                    break;
+                case 'whitelist':
+                    loadWhitelist();
+                    break;
+                case 'blacklist':
+                    loadBlacklist();
+                    break;
+                case 'alerts':
+                    loadAlerts();
+                    break;
+                case 'geo-map':
+                    loadGeoMap();
+                    break;
+                case 'logs':
+                    loadRealtimeLogs();
+                    break;
+                case 'monitoring':
+                    loadMetrics();
+                    break;
+                case 'audit':
+                    loadAuditLogs();
+                    break;
+                case 'account':
+                    loadNotificationConfig();
+                    checkFirewallStatus();
+                    // 启动防火墙状态自动检查（每30秒）
+                    firewallStatusInterval = setInterval(checkFirewallStatus, 30000);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        // 加载仪表板数据
+        async function loadDashboard() {
+            showLoadingOverlay('加载仪表板数据...');
+            try {
+                await Promise.all([
+                    loadStats(),
+                    loadAlertStats(),
+                    renderCharts()
+                ]);
+            } finally {
+                hideLoadingOverlay();
+            }
+        }
+
+        // 加载统计信息
+        async function loadStats() {
+            try {
+                const response = await fetchWithErrorHandling('/api/blacklist/stats');
+                const stats = await response.json();
+                document.getElementById('total-count').textContent = stats.total ?? '-';
+                document.getElementById('active-count').textContent = stats.active ?? '-';
+                document.getElementById('expired-count').textContent = stats.expired ?? '-';
+                document.getElementById('permanent-count').textContent = stats.permanent ?? '-';
+            } catch (error) {
+                console.error('加载统计失败:', error);
+            }
+        }
+
+        // 加载告警统计数据
+        async function loadAlertStats() {
+            try {
+                const response = await fetchWithErrorHandling('/api/status');
+                const data = await response.json();
+                const alertStats = data?.alert_stats || {};
+
+                document.getElementById('total-alerts').textContent = alertStats.total ?? '-';
+                document.getElementById('today-alerts').textContent = alertStats.today ?? '-';
+                document.getElementById('week-alerts').textContent = alertStats.week ?? '-';
+                document.getElementById('month-alerts').textContent = alertStats.month ?? '-';
+                document.getElementById('critical-alerts').textContent = alertStats.critical ?? '-';
+            } catch (error) {
+                console.error('加载告警统计失败:', error);
+            }
+        }
+
+        // 渲染图表
+        async function renderCharts() {
+            const severityChart = document.getElementById('severity-chart');
+            const attackChart = document.getElementById('attack-chart');
+
+            try {
+                const response = await fetch('/api/status');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const data = await response.json();
+
+                // 渲染严重性分布图
+                const severityData = data?.prometheus_metrics?.alerts_by_severity || {};
+
+                const severityColors = {
+                    'critical': 'critical',
+                    'high': 'high',
+                    'medium': 'medium',
+                    'low': 'low',
+                    'info': 'info'
+                };
+
+                const severityLabels = {
+                    'critical': '严重',
+                    'high': '高',
+                    'medium': '中',
+                    'low': '低',
+                    'info': '信息'
+                };
+
+                // 检查是否有数据（至少有一个非零值）
+                const hasSeverityData = Object.values(severityData).some(count => count > 0);
+
+                if (!hasSeverityData) {
+                    severityChart.innerHTML = '<p style="text-align: center; color: #999; padding: 40px 0;">暂无告警数据</p>';
+                } else {
+                    const maxValue = Math.max(...Object.values(severityData), 1);
+
+                    severityChart.innerHTML = Object.entries(severityData).map(([severity, count]) => {
+                        const height = (count / maxValue) * 200;
+                        return `
+                            <div class="bar ${severityColors[severity]}" style="height: ${height}px;" data-tooltip="${severityLabels[severity]}: ${count}条告警">
+                                <span class="value">${count}</span>
+                                <span class="label">${severityLabels[severity]}</span>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                // 渲染攻击类型分布图（Top 10）
+                const attackData = data?.prometheus_metrics?.alerts_by_attack_type || {};
+
+                const sortedAttacks = Object.entries(attackData)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 10);
+
+                if (sortedAttacks.length === 0) {
+                    attackChart.innerHTML = '<p style="text-align: center; color: #999; padding: 40px 0;">暂无告警数据</p>';
+                } else {
+                    const maxAttackValue = Math.max(...sortedAttacks.map(([_, count]) => count), 1);
+
+                    attackChart.innerHTML = sortedAttacks.map(([attack, count]) => {
+                        const height = (count / maxAttackValue) * 200;
+                        const shortName = attack.length > 10 ? attack.substring(0, 10) + '...' : attack;
+                        return `
+                            <div class="bar" style="height: ${height}px;" data-tooltip="${attack}: ${count}次">
+                                <span class="value">${count}</span>
+                                <span class="label">${shortName}</span>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            } catch (error) {
+                console.error('渲染图表失败:', error);
+                const errorMsg = '<p style="text-align: center; color: #dc3545; padding: 40px 0;">加载失败</p>';
+                if (severityChart) severityChart.innerHTML = errorMsg;
+                if (attackChart) attackChart.innerHTML = errorMsg;
+            }
+        }
+
+        // 加载黑名单
+        async function loadBlacklist() {
+            try {
+                const response = await fetchWithErrorHandling('/api/blacklist');
+                const blacklist = await response.json();
+                const tbody = document.querySelector('#blacklist-table tbody');
+
+                // 确保返回的是数组
+                if (!Array.isArray(blacklist)) {
+                    tbody.innerHTML = '<tr><td colspan="5">加载失败: 数据格式错误</td></tr>';
+                    return;
+                }
+
+                if (blacklist.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="loading">黑名单为空</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = blacklist.map(item => {
+                    const now = new Date();
+                    // 正确解析UTC时间
+                    let expireTime = null;
+                    if (item.expire_at) {
+                        let expireStr = item.expire_at.trim();
+                        if (expireStr.includes(' ') && !expireStr.includes('T')) {
+                            expireStr = expireStr.replace(' ', 'T').split('.')[0] + 'Z';
+                        } else if (!expireStr.endsWith('Z')) {
+                            expireStr = expireStr.split('.')[0] + 'Z';
+                        }
+                        expireTime = new Date(expireStr);
+                    }
+
+                    const isExpired = expireTime && now > expireTime;
+                    const status = isExpired ? 'expired' : 'active';
+                    const statusText = isExpired ? '已过期' : '活跃';
+
+                    return `
+                        <tr>
+                            <td>${escapeHtml(item.ip)}</td>
+                            <td>${formatTimestamp(item.added_at)}</td>
+                            <td>${expireTime ? expireTime.toLocaleString('zh-CN', {hour12: false}) : '永不过期'}</td>
+                            <td><span class="status-badge status-${status}">${statusText}</span></td>
+                            <td>
+                                <button class="btn btn-danger" style="padding: 5px 10px; font-size: 12px;" onclick="removeIP('${item.ip}')">移除</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('加载黑名单失败:', error);
+            }
+        }
+
+        // 添加IP
+        async function addIP() {
+            const ip = document.getElementById('ip-input').value.trim();
+            const expireHours = parseInt(document.getElementById('expire-input').value) || 24;
+
+            if (!ip) {
+                showToast('请输入IP地址', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetchWithErrorHandling(
+                    '/api/blacklist/add',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ip, expire_hours: expireHours })
+                    },
+                    'IP已成功添加到黑名单',
+                    true,
+                    '添加IP中...'
+                );
+                const result = await response.json();
+
+                if (result.success) {
+                    document.getElementById('ip-input').value = '';
+                    loadBlacklist();
+                    loadStats();
+                }
+            } catch (error) {
+                console.error('添加IP失败:', error);
+            }
+        }
+
+        // 移除IP
+        async function removeIP(ip) {
+            if (!confirm(`确定要移除IP ${ip} 吗？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetchWithErrorHandling(
+                    '/api/blacklist/remove',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ip })
+                    },
+                    'IP移除成功',
+                    true,
+                    '移除IP中...',
+                    60000  // 设置60秒超时，因为需要SSH到防火墙
+                );
+                const result = await response.json();
+
+                if (result.success) {
+                    loadBlacklist();
+                    loadStats();
+                }
+            } catch (error) {
+                console.error('移除IP失败:', error);
+            }
+        }
+
+        // ========== 白名单管理函数 ==========
+
+        // 加载白名单
+        async function loadWhitelist() {
+            const tbody = document.querySelector('#whitelist-table tbody');
+            try {
+                const response = await fetchWithErrorHandling('/api/whitelist');
+                const whitelist = await response.json();
+
+                if (!Array.isArray(whitelist)) {
+                    tbody.innerHTML = '<tr><td colspan="5">加载失败: 数据格式错误</td></tr>';
+                    return;
+                }
+
+                if (whitelist.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5">暂无白名单记录</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = whitelist.map(item => `
+                    <tr>
+                        <td><code>${escapeHtml(item.ip_or_cidr)}</code></td>
+                        <td>${escapeHtml(item.description || '-')}</td>
+                        <td>${escapeHtml(item.type)}</td>
+                        <td>${formatTimestamp(item.created_at)}</td>
+                        <td>
+                            <button class="btn btn-danger" onclick="removeWhitelistIP('${item.ip_or_cidr}')">移除</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                tbody.innerHTML = `<tr><td colspan="5">加载失败: ${error.message}</td></tr>`;
+            }
+        }
+
+        // 添加到白名单
+        async function addWhitelistIP() {
+            const ipInput = document.getElementById('whitelist-ip-input');
+            const descInput = document.getElementById('whitelist-desc-input');
+            const ip = ipInput.value.trim();
+            const description = descInput.value.trim();
+
+            if (!ip) {
+                alert('请输入IP地址或网段');
+                return;
+            }
+
+            // 验证IP格式
+            const ipRegex = /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(\/\d{1,2})?$/;
+            if (!ipRegex.test(ip)) {
+                alert('无效的IP地址或网段格式');
+                return;
+            }
+
+            try {
+                const response = await fetchWithErrorHandling(
+                    '/api/whitelist/add',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ip, description })
+                    },
+                    '添加成功',
+                    true,
+                    '添加中...'
+                );
+                const result = await response.json();
+
+                if (result.success) {
+                    ipInput.value = '';
+                    descInput.value = '';
+                    loadWhitelist();
+                } else {
+                    alert(result.message || '添加失败');
+                }
+            } catch (error) {
+                console.error('添加白名单失败:', error);
+                alert('添加失败: ' + error.message);
+            }
+        }
+
+        // 从白名单移除
+        async function removeWhitelistIP(ipOrCidr) {
+            if (!confirm(`确定要从白名单移除 ${ipOrCidr} 吗？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetchWithErrorHandling(
+                    '/api/whitelist/remove',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ip: ipOrCidr })
+                    },
+                    '移除成功',
+                    true,
+                    '移除中...'
+                );
+                const result = await response.json();
+
+                if (result.success) {
+                    loadWhitelist();
+                }
+            } catch (error) {
+                console.error('移除白名单失败:', error);
+            }
+        }
+
+        // 从配置文件导入白名单
+        async function importWhitelistFromConfig() {
+            if (!confirm('确定要从配置文件导入白名单吗？这将把 .env 文件中的 IP_WHITELIST 配置导入到数据库。')) {
+                return;
+            }
+
+            try {
+                const response = await fetchWithErrorHandling(
+                    '/api/whitelist/import',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    },
+                    null,
+                    true,
+                    '导入中...'
+                );
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(`导入完成: 新增 ${result.imported} 条, 跳过 ${result.skipped} 条`);
+                    loadWhitelist();
+                }
+            } catch (error) {
+                console.error('导入白名单失败:', error);
+            }
+        }
+
+        // 清理过期IP
+        async function cleanupExpired() {
+            if (!confirm('确定要清理所有过期的IP吗？')) {
+                return;
+            }
+
+            try {
+                const response = await fetchWithErrorHandling(
+                    '/api/blacklist/cleanup',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    },
+                    null,
+                    true,
+                    '清理中...'
+                );
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast(`清理完成，移除了 ${result.count} 个过期IP`, 'success');
+                    loadBlacklist();
+                    loadStats();
+                }
+            } catch (error) {
+                console.error('清理失败:', error);
+            }
+        }
+
+        // 加载指标
+        async function loadMetrics() {
+            try {
+                const response = await fetch('/api/prometheus/raw');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const metrics = await response.text();
+                document.getElementById('metrics-content').textContent = metrics;
+
+                // 解析并显示指标表格
+                const metricsTable = document.getElementById('metrics-table-body');
+                const lines = metrics.split('\n').filter(line => line && !line.startsWith('#'));
+
+                const metricsData = lines.map(line => {
+                    const parts = line.split(' ');
+                    return {
+                        name: parts[0],
+                        value: parts[1],
+                        labels: parts[0].match(/\{[^}]+\}/)?.[0] || ''
+                    };
+                });
+
+                metricsTable.innerHTML = metricsData.map(metric => `
+                    <tr>
+                        <td><code>${metric.name}</code></td>
+                        <td>${metric.value}</td>
+                        <td>${metric.labels}</td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('加载指标失败:', error);
+            }
+        }
+
+        // 下载Prometheus格式指标
+        async function downloadPrometheusMetrics() {
+            try {
+                const response = await fetch('/api/prometheus/raw');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const metrics = await response.text();
+                const blob = new Blob([metrics], { type: 'text/plain' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'prometheus_metrics.txt';
+                a.click();
+                window.URL.revokeObjectURL(url);
+                showToast('指标已下载', 'success');
+            } catch (error) {
+                console.error('下载指标失败:', error);
+            }
+        }
+
+        // 实时日志相关
+        let autoRefreshInterval = null;
+        // 防火墙状态检查间隔
+        let firewallStatusInterval = null;
+
+        async function loadRealtimeLogs() {
+            const tbody = document.querySelector('#logs-table tbody');
+            try {
+                const logType = document.getElementById('log-type-filter').value;
+                const url = logType ? `/api/logs?count=100&type=${logType}` : '/api/logs?count=100';
+
+                // 加载日志
+                const response = await fetchWithErrorHandling(url);
+                const logs = await response.json();
+
+                // 确保返回的是数组
+                if (!Array.isArray(logs)) {
+                    tbody.innerHTML = '<tr><td colspan="7">加载失败: 数据格式错误</td></tr>';
+                    return;
+                }
+
+                if (logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="loading">暂无日志</td></tr>';
+                } else {
+                    tbody.innerHTML = logs.map(log => {
+                        const parsed = log.parsed || {};
+                        const typeClass = log.type === 'IPS' ? 'log-type-ips' :
+                                        log.type === 'SESSION' ? 'log-type-session' : 'log-type-other';
+                        // 确保 raw 字段存在
+                        const raw = log.raw || '';
+                        const displayRaw = raw.length > 100 ? raw.substring(0, 100) + '...' : raw;
+                        return `
+                            <tr class="${typeClass}">
+                                <td>${log.timestamp || '-'}</td>
+                                <td><span class="log-badge ${typeClass}">${log.type || '-'}</span></td>
+                                <td>${parsed.SrcIp || '-'}</td>
+                                <td>${parsed.DstIp || '-'}</td>
+                                <td>${parsed.SignName || (parsed.Sign_id || '-')}</td>
+                                <td>${parsed.Severity || '-'}</td>
+                                <td style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${raw}">${displayRaw}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                }
+
+                // 更新统计信息
+                try {
+                    const statsResponse = await fetchWithErrorHandling('/api/logs/stats');
+                    const stats = await statsResponse.json();
+                    if (stats && typeof stats === 'object') {
+                        document.getElementById('log-buffer-total').textContent = stats.total || 0;
+                        document.getElementById('log-buffer-ips').textContent = stats.by_type?.IPS || 0;
+                        document.getElementById('log-buffer-session').textContent = stats.by_type?.SESSION || 0;
+                        const otherCount = (stats.by_type?.AM || 0) + (stats.by_type?.OTHER || 0);
+                        document.getElementById('log-buffer-other').textContent = otherCount;
+                    }
+                } catch (statsError) {
+                    console.error('加载日志统计失败:', statsError);
+                }
+
+            } catch (error) {
+                tbody.innerHTML = '<tr><td colspan="7">加载失败: ' + error.message + '</td></tr>';
+                console.error('加载实时日志失败:', error);
+            }
+        }
+
+        function toggleAutoRefresh() {
+            const checkbox = document.getElementById('auto-refresh');
+            if (checkbox.checked) {
+                autoRefreshInterval = setInterval(loadRealtimeLogs, 5000);
+            } else {
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+            }
+        }
+
+        // 加载审计日志
+        async function loadAuditLogs() {
+            const tbody = document.querySelector('#audit-table tbody');
+            try {
+                const response = await fetchWithErrorHandling('/api/audit?count=20');
+                let logs;
+                try {
+                    logs = await response.json();
+                } catch (jsonError) {
+                    console.error('JSON解析失败:', jsonError);
+                    tbody.innerHTML = '<tr><td colspan="4" class="loading">加载失败: 数据格式错误</td></tr>';
+                    return;
+                }
+
+                // 确保logs是数组
+                if (!Array.isArray(logs)) {
+                    console.error('返回数据不是数组:', typeof logs, logs);
+                    tbody.innerHTML = '<tr><td colspan="4" class="loading">加载失败: 数据格式错误</td></tr>';
+                    return;
+                }
+
+                if (logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="loading">暂无审计日志</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = logs.map(log => {
+                    try {
+                        const timestamp = log.timestamp ? log.timestamp.replace('T', ' ').substring(0, 19) : '-';
+                        const details = log.details ? JSON.stringify(log.details) : '{}';
+                        return `
+                            <tr>
+                                <td>${timestamp}</td>
+                                <td>${log.event_type || '-'}</td>
+                                <td>${log.ip || '-'}</td>
+                                <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${details}">${details}</td>
+                            </tr>
+                        `;
+                    } catch (e) {
+                        console.error('处理日志条目失败:', log, e);
+                        return '<tr><td colspan="4">数据错误</td></tr>';
+                    }
+                }).join('');
+            } catch (error) {
+                console.error('加载审计日志失败:', error);
+                tbody.innerHTML = '<tr><td colspan="4" class="loading">加载失败: ' + error.message + '</td></tr>';
+            }
+        }
+
+        // 页面加载时检查登录状态并加载仪表板数据
+        window.onload = function() {
+            checkLogin().then(isLoggedIn => {
+                if (isLoggedIn) {
+                    loadDashboard();
+                }
+            });
+        };
+
+        // 检查登录状态
+        async function checkLogin() {
+            try {
+                const response = await fetch('/api/status');
+                // 只在返回401（未认证）时跳转到登录页
+                if (response.status === 401) {
+                    window.location.href = '/';
+                    return false;
+                }
+                // 其他状态码（如200, 404, 500等），如果是成功状态则返回true
+                return response.ok;
+            } catch (error) {
+                // 网络错误或其他异常，记录日志但不强制跳转
+                console.error('检查登录状态失败:', error);
+                // 网络错误时不跳转，允许用户继续尝试
+                return true;
+            }
+        }
+
+        // 登出
+        async function logout() {
+            if (!confirm('确定要退出登录吗？')) {
+                return;
+            }
+
+            try {
+                await fetchWithErrorHandling('/api/logout', { method: 'POST' }, '已退出登录');
+                document.cookie = 'session_id=; path=/; max-age=0';
+                window.location.href = '/';
+            } catch (error) {
+                console.error('登出失败:', error);
+            }
+        }
+
+        // 修改密码
+        async function changePassword() {
+            const oldPassword = document.getElementById('old-password').value;
+            const newPassword = document.getElementById('new-password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+
+            if (!oldPassword || !newPassword || !confirmPassword) {
+                showToast('请填写所有字段', 'warning');
+                return;
+            }
+
+            if (newPassword.length < 6) {
+                showToast('新密码长度至少为6位', 'warning');
+                return;
+            }
+
+            if (newPassword !== confirmPassword) {
+                showToast('两次输入的新密码不一致', 'warning');
+                return;
+            }
+
+            try {
+                await fetchWithErrorHandling(
+                    '/api/change-password',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
+                    },
+                    '密码修改成功，请重新登录',
+                    true,
+                    '修改密码中...'
+                );
+
+                setTimeout(() => {
+                    logout();
+                }, 2000);
+            } catch (error) {
+                console.error('修改密码失败:', error);
+            }
+        }
+
+        // 加载告警列表
+        async function loadAlerts() {
+            const count = document.getElementById('alert-count').value || 50;
+            const tbody = document.querySelector('#alerts-table tbody');
+
+            try {
+                const response = await fetchWithErrorHandling(`/api/alerts?count=${count}`);
+                const alerts = await response.json();
+
+                // 确保返回的是数组
+                if (!Array.isArray(alerts)) {
+                    tbody.innerHTML = '<tr><td colspan="8">加载失败: 数据格式错误</td></tr>';
+                    return;
+                }
+
+                if (alerts.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="loading">暂无告警记录</td></tr>';
+                    return;
+                }
+
+                const severityLabels = {
+                    'critical': '严重',
+                    'high': '高',
+                    'medium': '中',
+                    'low': '低',
+                    'info': '信息'
+                };
+
+                tbody.innerHTML = alerts.map(alert => {
+                    const severityClass = `severity-${alert.severity}`;
+                    // 确保字段存在，提供默认值
+                    const event = alert.event || alert.attack_type || 'Unknown';
+                    const srcPort = alert.src_port || 'N/A';
+                    const dstPort = alert.dst_port || 'N/A';
+
+                    // 告警时间（原始日志中的时间）- 保持原样显示
+                    const detectTime = alert.detect_time || '-';
+
+                    // 记录时间（系统时间）- 格式化为本地时间
+                    const recordTimeRaw = alert.timestamp || alert.created_at;
+                    const recordTime = recordTimeRaw ? formatTimestamp(recordTimeRaw) : '-';
+
+                    // 地理位置显示
+                    const geoDisplay = alert.geo_display || '未知';
+                    const geoTitle = alert.geo_country_name ?
+                        `${alert.geo_country_name}${alert.geo_city ? ' - ' + alert.geo_city : ''}` : '';
+
+                    return `
+                        <tr>
+                            <td>${detectTime}</td>
+                            <td>${recordTime}</td>
+                            <td>${alert.src_ip || '-'}</td>
+                            <td title="${geoTitle}">${geoDisplay}</td>
+                            <td>${alert.dst_ip || '-'}</td>
+                            <td>${alert.protocol || '-'}</td>
+                            <td>${srcPort} → ${dstPort}</td>
+                            <td title="${event}">${event.length > 30 ? event.substring(0, 30) + '...' : event}</td>
+                            <td><span class="severity-badge ${severityClass}">${severityLabels[alert.severity] || '未知'}</span></td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (error) {
+                tbody.innerHTML = `<tr><td colspan="9">加载失败: ${error.message}</td></tr>`;
+                console.error('加载告警失败:', error);
+            }
+        }
+
+        // 国家中心坐标映射（用于无精确经纬度时的备用）
+        const COUNTRY_CENTER_COORDS = {
+            'CN': [104.1954, 35.8617],   // 中国
+            'US': [-95.7129, 37.0902],  // 美国
+            'RU': [105.3188, 61.5240],  // 俄罗斯
+            'DE': [10.4515, 51.1657],   // 德国
+            'FR': [2.2137, 46.2276],    // 法国
+            'GB': [-3.4360, 55.3781],   // 英国
+            'JP': [138.2529, 36.2048],  // 日本
+            'KR': [127.7669, 35.9078],  // 韩国
+            'IN': [77.2090, 20.5937],   // 印度
+            'BR': [-51.9253, -14.2350], // 巴西
+            'CA': [-106.3468, 56.1304], // 加拿大
+            'AU': [133.7751, -25.2744], // 澳大利亚
+            'SG': [103.8198, 1.3521],   // 新加坡
+            'HK': [114.1694, 22.3193],  // 香港
+            'TW': [120.9605, 23.6978],  // 台湾
+            'VN': [108.2772, 14.0583],  // 越南
+            'TH': [100.9925, 15.8700],  // 泰国
+            'ID': [113.9213, -0.7893],  // 印度尼西亚
+            'MY': [101.9758, 4.2105],   // 马来西亚
+            'PH': [121.7740, 12.8797],  // 菲律宾
+            'IT': [12.5674, 41.8719],   // 意大利
+            'ES': [-3.7492, 40.4637],   // 西班牙
+            'NL': [5.2913, 52.1326],    // 荷兰
+            'UA': [31.1656, 48.3794],   // 乌克兰
+            'PL': [19.1451, 51.9194],   // 波兰
+            'SE': [18.6435, 60.1282],   // 瑞典
+            'NO': [8.4689, 60.4720],    // 挪威
+            'FI': [25.7482, 61.9241],   // 芬兰
+            'DK': [9.5018, 56.2639],    // 丹麦
+            'CH': [8.2275, 46.8182],    // 瑞士
+            'AT': [14.5501, 47.5162],   // 奥地利
+            'BE': [4.4699, 50.5039],    // 比利时
+            'CZ': [15.4729, 49.8175],   // 捷克
+            'GR': [21.8243, 39.0742],   // 希腊
+            'PT': [-8.2245, 39.3999],   // 葡萄牙
+            'IE': [-8.2439, 53.4129],   // 爱尔兰
+            'TR': [35.2433, 38.9637],   // 土耳其
+            'IL': [34.8516, 31.0461],   // 以色列
+            'SA': [45.0792, 23.8859],   // 沙特阿拉伯
+            'AE': [53.8478, 23.4241],   // 阿联酋
+            'ZA': [22.9375, -30.5595],  // 南非
+            'EG': [30.8025, 26.8206],   // 埃及
+            'NG': [8.6753, 9.0820],     // 尼日利亚
+            'KE': [37.9083, -0.0236],   // 肯尼亚
+            'MX': [-102.5528, 23.6345], // 墨西哥
+            'AR': [-63.6167, -38.4161], // 阿根廷
+            'CL': [-71.5430, -35.6751], // 智利
+            'CO': [-74.2973, 4.5709],   // 哥伦比亚
+            'PE': [-75.0152, -9.1900],  // 秘鲁
+            'VE': [-66.5897, 6.4238],   // 委内瑞拉
+            'NZ': [174.8860, -40.9006], // 新西兰
+            'PK': [69.3451, 30.3753],   // 巴基斯坦
+            'BD': [90.3563, 23.6850],   // 孟加拉国
+            'LK': [80.7718, 7.8731],    // 斯里兰卡
+            'NP': [84.1240, 28.3949],   // 尼泊尔
+            'MM': [95.9560, 21.9162],   // 缅甸
+            'KH': [104.9902, 12.5657],  // 柬埔寨
+            'LA': [102.4955, 19.8563],  // 老挝
+            'KZ': [66.9237, 48.0196],   // 哈萨克斯坦
+            'UZ': [64.5853, 41.3775],   // 乌兹别克斯坦
+            'AF': [67.7100, 33.9391],   // 阿富汗
+            'IR': [53.6880, 32.4279],   // 伊朗
+            'IQ': [43.6793, 33.2232],   // 伊拉克
+            'SY': [38.9968, 34.8021],   // 叙利亚
+            'JO': [36.2384, 30.5852],   // 约旦
+            'LB': [35.8623, 33.8547],   // 黎巴嫩
+            'QA': [51.1839, 25.3548],   // 卡塔尔
+            'KW': [47.4818, 29.3117],   // 科威特
+            'OM': [55.9233, 21.4735],   // 阿曼
+            'YE': [48.5164, 15.5527],   // 也门
+            'RO': [25.0137, 45.9432],   // 罗马尼亚
+            'BG': [25.4858, 42.7339],   // 保加利亚
+            'HU': [19.5033, 47.1625],   // 匈牙利
+            'SK': [19.6990, 48.6690],   // 斯洛伐克
+            'SI': [14.9955, 46.1512],   // 斯洛文尼亚
+            'HR': [16.4681, 45.1000],   // 克罗地亚
+            'RS': [21.0058, 44.0165],   // 塞尔维亚
+            'BA': [17.6791, 43.9159],   // 波黑
+            'MK': [21.7453, 41.5124],   // 北马其顿
+            'AL': [20.1683, 41.1533],   // 阿尔巴尼亚
+            'ME': [19.2183, 42.7087],   // 黑山
+            'XK': [20.9030, 42.6026],   // 科索沃
+            'BY': [27.9534, 53.7098],   // 白俄罗斯
+            'MD': [28.3699, 47.4116],   // 摩尔多瓦
+            'GE': [43.3569, 42.3154],   // 格鲁吉亚
+            'AM': [45.0382, 40.0691],   // 亚美尼亚
+            'AZ': [47.5769, 40.1431],   // 阿塞拜疆
+            'IS': [-19.0208, 64.9631],  // 冰岛
+            'LU': [6.1296, 49.8153],    // 卢森堡
+            'MC': [7.4153, 43.7384],    // 摩纳哥
+            'AD': [1.5607, 42.5423],    // 安道尔
+            'SM': [12.4549, 43.9426],   // 圣马力诺
+            'VA': [12.4477, 41.9022],   // 梵蒂冈
+            'MT': [14.3754, 35.9375],   // 马耳他
+            'CY': [33.4299, 35.1264],   // 塞浦路斯
+            'LI': [9.5554, 47.1660]     // 列支敦士登
+        };
+
+        // 加载地理位置地图
+        async function loadGeoMap() {
+            console.log('开始加载地理位置地图...');
+            try {
+                const count = document.getElementById('geo-time-range')?.value || 100;
+                const response = await fetchWithErrorHandling(`/api/alerts?count=${count}`);
+                const alerts = await response.json();
+
+                console.log('获取到告警数据:', alerts.length, '条');
+
+                if (!Array.isArray(alerts)) {
+                    console.error('告警数据格式错误');
+                    return;
+                }
+
+                // 按国家统计
+                const countryStats = {};
+                const cityStats = {};
+                const mapData = [];
+                let geoCount = 0;
+
+                alerts.forEach(alert => {
+                    console.log('告警数据:', alert.src_ip, alert.geo_display);
+                    if (alert.geo_country_code) {
+                        geoCount++;
+                        const countryCode = alert.geo_country_code;
+                        const countryName = alert.geo_country_name || '未知';
+                        const city = alert.geo_city || '未知';
+
+                        // 统计国家
+                        if (!countryStats[countryName]) {
+                            countryStats[countryName] = {
+                                name: countryName,
+                                code: countryCode,
+                                count: 0,
+                                flag: alert.geo_country_flag || '🌍'
+                            };
+                        }
+                        countryStats[countryName].count++;
+
+                        // 统计城市 - 包括未知城市，使数据与国家统计对等
+                        if (city && city !== '未知') {
+                            // 有城市信息的，按国家-城市分开统计
+                            const cityKey = `${countryName}-${city}`;
+                            if (!cityStats[cityKey]) {
+                                cityStats[cityKey] = {
+                                    name: city,
+                                    country: countryName,
+                                    count: 0
+                                };
+                            }
+                            cityStats[cityKey].count++;
+                        } else {
+                            // 没有城市信息的，统一归类到"未知城市"
+                            const unknownCityKey = '未知城市';
+                            if (!cityStats[unknownCityKey]) {
+                                cityStats[unknownCityKey] = {
+                                    name: '未知城市',
+                                    country: '多国',
+                                    count: 0
+                                };
+                            }
+                            cityStats[unknownCityKey].count++;
+                        }
+
+                        // 地图数据 - 优先使用精确坐标，否则使用国家中心坐标
+                        let longitude, latitude;
+                        if (alert.geo_latitude && alert.geo_longitude) {
+                            longitude = alert.geo_longitude;
+                            latitude = alert.geo_latitude;
+                        } else if (COUNTRY_CENTER_COORDS[countryCode]) {
+                            // 使用国家中心坐标作为备用
+                            longitude = COUNTRY_CENTER_COORDS[countryCode][0];
+                            latitude = COUNTRY_CENTER_COORDS[countryCode][1];
+                        }
+
+                        if (longitude !== undefined && latitude !== undefined) {
+                            mapData.push({
+                                name: countryName,
+                                value: [longitude, latitude, 1],
+                                country: countryCode
+                            });
+                        }
+                    }
+                });
+
+                console.log('统计结果 - 有地理位置的告警:', geoCount, '条');
+                console.log('国家统计:', Object.keys(countryStats).length, '个');
+                console.log('城市统计:', Object.keys(cityStats).length, '个');
+                console.log('地图数据点:', mapData.length, '个');
+
+                // 显示提示信息
+                if (geoCount === 0) {
+                    const mapContainer = document.getElementById('world-map');
+                    if (mapContainer) {
+                        mapContainer.innerHTML = '<div style="padding: 40px; text-align: center; color: #666;">暂无地理位置数据，请稍后刷新<br><small>系统正在查询IP地理位置信息...</small></div>';
+                    }
+                    return;
+                }
+
+                // 转换为数组并排序
+                const countryArray = Object.values(countryStats).sort((a, b) => b.count - a.count).slice(0, 10);
+                const cityArray = Object.values(cityStats).sort((a, b) => b.count - a.count).slice(0, 10);
+
+                console.log('渲染国家图表:', countryArray);
+                console.log('渲染城市图表:', cityArray);
+
+                // 渲染国家图表
+                renderCountryChart(countryArray);
+
+                // 渲染城市图表
+                renderCityChart(cityArray);
+
+                // 渲染世界地图
+                await renderWorldMap(mapData, countryStats);
+
+            } catch (error) {
+                console.error('加载地理地图失败:', error);
+                const mapContainer = document.getElementById('world-map');
+                if (mapContainer) {
+                    mapContainer.innerHTML = `<div style="padding: 40px; text-align: center; color: #ef4444;">加载失败: ${error.message}</div>`;
+                }
+            }
+        }
+
+        // 渲染国家分布图表
+        function renderCountryChart(data) {
+            const chartDom = document.getElementById('country-chart');
+            if (!chartDom) return;
+
+            if (!data || data.length === 0) {
+                chartDom.innerHTML = '<div style="padding: 40px; text-align: center; color: #666;">暂无数据</div>';
+                return;
+            }
+
+            const myChart = echarts.init(chartDom);
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' }
+                },
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '3%',
+                    top: '3%',
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'value',
+                    name: '攻击次数'
+                },
+                yAxis: {
+                    type: 'category',
+                    data: data.map(d => d.name),
+                    axisLabel: {
+                        formatter: function(value) {
+                            const item = data.find(d => d.name === value);
+                            return (item?.flag || '') + ' ' + value;
+                        }
+                    }
+                },
+                series: [{
+                    type: 'bar',
+                    data: data.map(d => ({
+                        value: d.count,
+                        itemStyle: {
+                            color: d.count > 50 ? '#ef4444' : d.count > 20 ? '#f59e0b' : '#10b981'
+                        }
+                    })),
+                    label: {
+                        show: true,
+                        position: 'right'
+                    }
+                }]
+            };
+
+            myChart.setOption(option);
+        }
+
+        // 渲染城市分布图表
+        function renderCityChart(data) {
+            const chartDom = document.getElementById('city-chart');
+            if (!chartDom) return;
+
+            if (!data || data.length === 0) {
+                chartDom.innerHTML = '<div style="padding: 40px; text-align: center; color: #666;">暂无数据</div>';
+                return;
+            }
+
+            const myChart = echarts.init(chartDom);
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' }
+                },
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '3%',
+                    top: '3%',
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'value',
+                    name: '攻击次数'
+                },
+                yAxis: {
+                    type: 'category',
+                    data: data.map(d => d.name)
+                },
+                series: [{
+                    type: 'bar',
+                    data: data.map(d => ({
+                        value: d.count,
+                        itemStyle: {
+                            color: d.count > 20 ? '#ef4444' : '#3b82f6'
+                        }
+                    })),
+                    label: {
+                        show: true,
+                        position: 'right'
+                    }
+                }]
+            };
+
+            myChart.setOption(option);
+        }
+
+        // 渲染世界地图
+        async function renderWorldMap(data, countryStats) {
+            const chartDom = document.getElementById('world-map');
+            if (!chartDom) return;
+
+            if (!data || data.length === 0) {
+                chartDom.innerHTML = '<div style="padding: 40px; text-align: center; color: #666;">暂无地图坐标数据，请稍后刷新</div>';
+                return;
+            }
+
+            const myChart = echarts.init(chartDom);
+
+            // 聚合地图数据（按国家合并）
+            const aggregatedData = {};
+            data.forEach(item => {
+                if (!aggregatedData[item.country]) {
+                    aggregatedData[item.country] = {
+                        name: item.country,
+                        value: [item.value[0], item.value[1], 0]
+                    };
+                }
+                aggregatedData[item.country].value[2]++;
+            });
+
+            const mapDataArray = Object.values(aggregatedData);
+
+            const option = {
+                tooltip: {
+                    trigger: 'item',
+                    formatter: function(params) {
+                        if (params.data) {
+                            return `${params.data.name}<br/>攻击次数: ${params.data.value[2]}`;
+                        }
+                        return params.name;
+                    }
+                },
+                visualMap: {
+                    min: 0,
+                    max: Math.max(...mapDataArray.map(d => d.value[2]), 10),
+                    text: ['高', '低'],
+                    calculable: true,
+                    inRange: {
+                        color: ['#e0f3f8', '#abd9e9', '#74add1', '#4575b4', '#313695']
+                    }
+                },
+                geo: {
+                    map: 'world',
+                    roam: true,
+                    zoom: 1.2,
+                    label: {
+                        show: false
+                    },
+                    itemStyle: {
+                        areaColor: '#f3f4f6',
+                        borderColor: '#9ca3af'
+                    },
+                    emphasis: {
+                        itemStyle: {
+                            areaColor: '#ffd700'
+                        }
+                    }
+                },
+                series: [{
+                    type: 'scatter',
+                    coordinateSystem: 'geo',
+                    data: mapDataArray,
+                    symbolSize: function(val) {
+                        return Math.max(10, Math.min(50, val[2] * 3));
+                    },
+                    itemStyle: {
+                        color: '#ef4444',
+                        shadowBlur: 10,
+                        shadowColor: 'rgba(239, 68, 68, 0.5)'
+                    },
+                    label: {
+                        show: true,
+                        formatter: '{b}',
+                        position: 'right'
+                    },
+                    emphasis: {
+                        scale: true
+                    }
+                }]
+            };
+
+            // 加载世界地图
+            console.log('开始加载世界地图...');
+
+            // 尝试多个CDN源
+            const mapUrls = [
+                'https://cdn.jsdelivr.net/npm/echarts@4.9.0/map/json/world.json',
+                'https://unpkg.com/echarts@4.9.0/map/json/world.json',
+                'https://geo.datav.aliyun.com/areas_v3/bound/world.json'
+            ];
+
+            let loadSuccess = false;
+
+            for (const url of mapUrls) {
+                try {
+                    console.log('尝试从CDN加载地图:', url);
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        const worldJson = await response.json();
+                        echarts.registerMap('world', worldJson);
+                        myChart.setOption(option);
+                        loadSuccess = true;
+                        console.log('地图加载成功!');
+                        break;
+                    }
+                } catch (e) {
+                    console.warn('从CDN加载失败:', url, e);
+                    continue;
+                }
+            }
+
+            if (!loadSuccess) {
+                console.error('所有CDN都无法访问，尝试简化显示');
+                // 显示简化版本 - 只显示国家列表
+                chartDom.innerHTML = `
+                    <div style="padding: 20px;">
+                        <h4 style="margin-bottom: 15px;">🌍 攻击来源国家/地区</h4>
+                        <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                            ${Object.values(countryStats || {}).map(c => `
+                                <div style="padding: 10px 15px; background: ${c.count > 20 ? '#fee2e2' : c.count > 10 ? '#fef3c7' : '#d1fae5'};
+                                    border-radius: 8px; text-align: center;">
+                                    <div style="font-size: 24px;">${c.flag}</div>
+                                    <div style="font-size: 12px; color: #666;">${c.name}</div>
+                                    <div style="font-weight: bold; color: #ef4444;">${c.count}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // 更新防火墙配置
+        async function updateFirewallConfig() {
+            const fwIp = document.getElementById('fw-ip').value;
+            const fwUsername = document.getElementById('fw-username').value;
+            const fwPassword = document.getElementById('fw-password').value;
+
+            if (!fwIp && !fwUsername && !fwPassword) {
+                showToast('请至少输入一项配置进行修改', 'warning');
+                return;
+            }
+
+            if (!confirm('确定要更新防火墙配置吗？')) {
+                return;
+            }
+
+            try {
+                await fetchWithErrorHandling('/api/config/firewall', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fw_ip: fwIp,
+                        fw_username: fwUsername,
+                        fw_password: fwPassword
+                    })
+                }, '配置更新成功', true, '正在更新配置...');
+
+                // 清空密码框
+                document.getElementById('fw-password').value = '';
+            } catch (error) {
+                // 错误已由 fetchWithErrorHandling 处理
+            }
+        }
+
+        // 通知配置相关
+        let notificationConfigData = null;
+
+        // 切换通知渠道标签页
+        function switchNotifyTab(channel) {
+            // 更新标签页样式
+            document.querySelectorAll('.notify-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelector(`.notify-tab[data-channel="${channel}"]`).classList.add('active');
+
+            // 显示对应配置
+            document.querySelectorAll('.notify-config').forEach(config => {
+                config.classList.remove('active');
+            });
+            document.getElementById(`notify-${channel}`).classList.add('active');
+        }
+
+        // 显示对应的通知配置（保留兼容旧函数）
+        function showNotificationConfig() {
+            const channel = document.getElementById('notification-channel').value;
+            switchNotifyTab(channel);
+        }
+
+        // 测试防火墙连接
+        async function testFirewallConnection() {
+            const fwIp = document.getElementById('fw-ip').value;
+            if (!fwIp) {
+                showToast('请先输入防火墙IP地址', 'warning');
+                return;
+            }
+
+            try {
+                // 使用新的防火墙状态API
+                const response = await fetchWithErrorHandling(
+                    '/api/firewall/status',
+                    { method: 'GET' },
+                    null,
+                    true,
+                    '正在测试连接...'
+                );
+
+                const result = await response.json();
+
+                if (result.connected) {
+                    showToast('防火墙连接成功', 'success');
+                    document.getElementById('firewall-status').textContent = '已连接';
+                    document.getElementById('firewall-status').classList.add('active');
+                } else {
+                    showToast('防火墙连接失败: ' + (result.message || '未知错误'), 'error');
+                    document.getElementById('firewall-status').textContent = '连接失败';
+                    document.getElementById('firewall-status').classList.remove('active');
+                }
+            } catch (error) {
+                showToast('防火墙连接失败', 'error');
+                document.getElementById('firewall-status').textContent = '连接失败';
+                document.getElementById('firewall-status').classList.remove('active');
+            }
+        }
+
+        // 检查防火墙状态（后台自动调用）
+        async function checkFirewallStatus() {
+            try {
+                const response = await fetchWithErrorHandling('/api/firewall/status', { method: 'GET' });
+                const result = await response.json();
+
+                const badge = document.getElementById('firewall-status');
+                if (result.connected) {
+                    badge.textContent = '已连接';
+                    badge.classList.add('active');
+                } else {
+                    badge.textContent = '连接失败';
+                    badge.classList.remove('active');
+                }
+            } catch (error) {
+                // 静默失败，不影响用户体验
+                console.debug('检查防火墙状态失败:', error);
+            }
+        }
+
+        // 加载通知配置
+        async function loadNotificationConfig() {
+            try {
+                const response = await fetchWithErrorHandling('/api/notification/config');
+                notificationConfigData = await response.json();
+
+                // 更新各渠道配置显示
+                if (notificationConfigData.wechat) {
+                    document.getElementById('wechat-enabled').checked = notificationConfigData.wechat.enabled;
+                    document.getElementById('wechat-webhook').value = notificationConfigData.wechat.webhook_url || '';
+                }
+                if (notificationConfigData.dingtalk) {
+                    document.getElementById('dingtalk-enabled').checked = notificationConfigData.dingtalk.enabled;
+                    document.getElementById('dingtalk-webhook').value = notificationConfigData.dingtalk.webhook_url || '';
+                    document.getElementById('dingtalk-secret').value = notificationConfigData.dingtalk.sign_secret || '';
+                }
+                if (notificationConfigData.feishu) {
+                    document.getElementById('feishu-enabled').checked = notificationConfigData.feishu.enabled;
+                    document.getElementById('feishu-webhook').value = notificationConfigData.feishu.webhook_url || '';
+                }
+                if (notificationConfigData.email) {
+                    document.getElementById('email-enabled').checked = notificationConfigData.email.enabled;
+                    document.getElementById('email-smtp').value = notificationConfigData.email.smtp_host || '';
+                    document.getElementById('email-user').value = notificationConfigData.email.smtp_user || '';
+                    document.getElementById('email-sender').value = notificationConfigData.email.sender || '';
+                    document.getElementById('email-recipients').value = (notificationConfigData.email.recipients || []).join(',');
+                }
+
+                // 加载防火墙配置
+                if (notificationConfigData.fw_ip) {
+                    document.getElementById('fw-ip').value = notificationConfigData.fw_ip;
+                }
+                if (notificationConfigData.fw_username) {
+                    document.getElementById('fw-username').value = notificationConfigData.fw_username;
+                }
+
+            } catch (error) {
+                console.error('加载配置失败:', error);
+            }
+        }
+
+        // 更新通知配置
+        async function updateNotificationConfig(channel) {
+            const config = {
+                channel: channel,
+                enabled: document.getElementById(`${channel}-enabled`).checked
+            };
+
+            if (channel === 'wechat') {
+                config.webhook_url = document.getElementById('wechat-webhook').value;
+            } else if (channel === 'dingtalk') {
+                config.webhook_url = document.getElementById('dingtalk-webhook').value;
+                config.sign_secret = document.getElementById('dingtalk-secret').value;
+            } else if (channel === 'feishu') {
+                config.webhook_url = document.getElementById('feishu-webhook').value;
+            } else if (channel === 'email') {
+                config.smtp_host = document.getElementById('email-smtp').value;
+                config.smtp_user = document.getElementById('email-user').value;
+                config.smtp_password = document.getElementById('email-password').value;
+                config.sender = document.getElementById('email-sender').value;
+                config.recipients = document.getElementById('email-recipients').value.split(',').map(s => s.trim()).filter(s => s);
+            }
+
+            try {
+                await fetchWithErrorHandling(
+                    '/api/notification/update',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(config)
+                    },
+                    '通知配置已保存',
+                    true,
+                    '正在保存...'
+                );
+            } catch (error) {
+                // 错误已由 fetchWithErrorHandling 处理
+            }
+        }
+
+        // 测试通知
+        async function testNotification(channel) {
+            try {
+                const response = await fetchWithErrorHandling(
+                    '/api/notification/test',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ channel: channel })
+                    },
+                    null,
+                    true,
+                    '正在发送测试消息...'
+                );
+
+                const result = await response.json();
+                if (result.success) {
+                    showToast(result.message, 'success');
+                } else {
+                    showToast(result.message, 'error');
+                }
+            } catch (error) {
+                // 错误已由 fetchWithErrorHandling 处理
+            }
+        }
+
+        // 页面加载时加载通知配置
+        window.addEventListener('DOMContentLoaded', () => {
+            loadNotificationConfig();
+        });
+
+        // ============ 分析中心相关代码 ============
+
+        let analysisCharts = {};
+        let currentAnalysisHours = 24;
+
+        // 时间选择器事件
+        document.querySelectorAll('.time-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                currentAnalysisHours = parseInt(this.dataset.hours);
+                loadAnalysisData();
+            });
+        });
+
+        // 加载分析数据
+        async function loadAnalysisData() {
+            try {
+                // 加载概览统计
+                const overviewResponse = await fetch(`/api/analysis/overview?hours=${currentAnalysisHours}`);
+                const overviewData = await overviewResponse.json();
+                updateOverviewCards(overviewData);
+
+                // 加载趋势分析
+                const trendResponse = await fetch(`/api/analysis/trend?hours=${currentAnalysisHours}&interval=${currentAnalysisHours <= 24 ? 1 : 6}`);
+                const trendData = await trendResponse.json();
+                renderTrendChart(trendData);
+
+                // 加载攻击类型分布
+                const attackTypeResponse = await fetch(`/api/analysis/attack-types?hours=${currentAnalysisHours}`);
+                const attackTypeData = await attackTypeResponse.json();
+                renderAttackTypeChart(attackTypeData);
+
+                // 加载时间分布
+                const timeDistResponse = await fetch(`/api/analysis/time-distribution?hours=${currentAnalysisHours}`);
+                const timeDistData = await timeDistResponse.json();
+                renderTimeDistributionChart(timeDistData);
+
+                // 加载TOP攻击源
+                const attackersResponse = await fetch(`/api/analysis/top-attackers?hours=${currentAnalysisHours}&limit=10`);
+                const attackersData = await attackersResponse.json();
+                renderTopAttackersTable(attackersData);
+
+                // 加载TOP目标
+                const targetsResponse = await fetch(`/api/analysis/top-targets?hours=${currentAnalysisHours}&limit=10`);
+                const targetsData = await targetsResponse.json();
+                renderTopTargetsTable(targetsData);
+
+            } catch (error) {
+                console.error('加载分析数据失败:', error);
+                showToast('加载分析数据失败', 'error');
+            }
+        }
+
+        // 更新概览卡片
+        function updateOverviewCards(data) {
+            document.getElementById('analysis-total-attacks').textContent = data.total_attacks || 0;
+            document.getElementById('analysis-high-risk').textContent = data.high_risk_events || 0;
+            document.getElementById('analysis-attackers').textContent = data.active_attackers || 0;
+            document.getElementById('analysis-targets').textContent = data.targeted_assets || 0;
+        }
+
+        // 渲染趋势图表
+        function renderTrendChart(data) {
+            const chartDom = document.getElementById('trend-chart');
+            if (!chartDom) return;
+
+            if (analysisCharts.trend) {
+                analysisCharts.trend.dispose();
+            }
+
+            analysisCharts.trend = echarts.init(chartDom);
+
+            const times = data.time_buckets?.map(b => b.time) || [];
+            const counts = data.time_buckets?.map(b => b.count) || [];
+
+            // 处理空数据
+            if (!times || times.length === 0) {
+                chartDom.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;">暂无数据</div>';
+                return;
+            }
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'cross' }
+                },
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '3%',
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'category',
+                    data: times,
+                    axisLabel: { rotate: 45 }
+                },
+                yAxis: {
+                    type: 'value',
+                    name: '攻击次数'
+                },
+                series: [{
+                    name: '攻击次数',
+                    type: 'line',
+                    data: counts,
+                    smooth: true,
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: 'rgba(24, 144, 255, 0.5)' },
+                            { offset: 1, color: 'rgba(24, 144, 255, 0.1)' }
+                        ])
+                    },
+                    itemStyle: { color: '#1890ff' },
+                    lineStyle: { width: 3 }
+                }]
+            };
+
+            analysisCharts.trend.setOption(option);
+        }
+
+        // 渲染攻击类型图表
+        function renderAttackTypeChart(data) {
+            const chartDom = document.getElementById('attack-type-chart');
+            if (!chartDom) return;
+
+            if (analysisCharts.attackType) {
+                analysisCharts.attackType.dispose();
+            }
+
+            analysisCharts.attackType = echarts.init(chartDom);
+
+            const distribution = data.distribution || [];
+
+            // 处理空数据
+            if (!distribution || distribution.length === 0) {
+                chartDom.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;">暂无数据</div>';
+                return;
+            }
+
+            const chartData = distribution.slice(0, 8).map(d => ({
+                name: d.attack_type || '未知',
+                value: d.total || 0
+            }));
+
+            // 使用非紫色配色方案：蓝色、绿色、橙色、红色、青色等
+            const colors = ['#1890ff', '#52c41a', '#faad14', '#ff4d4f', '#13c2c2',
+                           '#eb2f96', '#722ed1', '#fa8c16', '#a0d911', '#2f54eb'];
+
+            const option = {
+                tooltip: {
+                    trigger: 'item',
+                    formatter: '{b}: {c} ({d}%)'
+                },
+                legend: {
+                    orient: 'vertical',
+                    right: '2%',
+                    top: 'middle',
+                    textStyle: {
+                        fontSize: 11
+                    },
+                    itemGap: 6,
+                    itemWidth: 10,
+                    itemHeight: 10
+                },
+                series: [{
+                    type: 'pie',
+                    radius: ['30%', '55%'],
+                    center: ['25%', '50%'],
+                    avoidLabelOverlap: true,
+                    itemStyle: {
+                        borderRadius: 4,
+                        borderColor: '#fff',
+                        borderWidth: 1
+                    },
+                    label: {
+                        show: true,
+                        position: 'outside',
+                        formatter: '{d}%',
+                        fontSize: 9,
+                        color: '#666'
+                    },
+                    emphasis: {
+                        label: {
+                            show: true,
+                            fontSize: 11,
+                            fontWeight: 'bold'
+                        },
+                        itemStyle: {
+                            shadowBlur: 8,
+                            shadowOffsetX: 0,
+                            shadowColor: 'rgba(0, 0, 0, 0.3)'
+                        }
+                    },
+                    labelLine: {
+                        show: true,
+                        length: 8,
+                        length2: 8,
+                        smooth: true
+                    },
+                    data: chartData
+                }],
+                color: colors
+            };
+
+            analysisCharts.attackType.setOption(option);
+        }
+
+        // 渲染时间分布图表
+        function renderTimeDistributionChart(data) {
+            const chartDom = document.getElementById('time-distribution-chart');
+            if (!chartDom) return;
+
+            if (analysisCharts.timeDist) {
+                analysisCharts.timeDist.dispose();
+            }
+
+            analysisCharts.timeDist = echarts.init(chartDom);
+
+            const hourlyData = data.hourly || [];
+            const hours = hourlyData.map(d => d.hour);
+            const counts = hourlyData.map(d => d.count);
+
+            // 处理空数据
+            if (!hours || hours.length === 0) {
+                chartDom.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;">暂无数据</div>';
+                return;
+            }
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' }
+                },
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '3%',
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'category',
+                    data: hours
+                },
+                yAxis: {
+                    type: 'value',
+                    name: '攻击次数'
+                },
+                series: [{
+                    type: 'bar',
+                    data: counts,
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: '#1890ff' },
+                            { offset: 1, color: '#096dd9' }
+                        ]),
+                        borderRadius: [5, 5, 0, 0]
+                    }
+                }]
+            };
+
+            analysisCharts.timeDist.setOption(option);
+        }
+
+        // 渲染TOP攻击源表格
+        function renderTopAttackersTable(data) {
+            const tbody = document.getElementById('top-attackers-table');
+            if (!tbody) return;
+
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999;">暂无数据</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(attacker => `
+                <tr>
+                    <td style="font-family: monospace; font-weight: 500;">${escapeHtml(attacker.src_ip)}</td>
+                    <td>${attacker.geo_display || '未知'}</td>
+                    <td>${attacker.attack_count}</td>
+                    <td>${attacker.target_count}</td>
+                    <td>${attacker.variety_count}</td>
+                    <td><span class="severity-tag ${attacker.max_severity}">${attacker.max_severity}</span></td>
+                    <td><span class="threat-badge ${attacker.threat_level}">${attacker.threat_level.toUpperCase()}</span></td>
+                </tr>
+            `).join('');
+        }
+
+        // 渲染TOP目标表格
+        function renderTopTargetsTable(data) {
+            const tbody = document.getElementById('top-targets-table');
+            if (!tbody) return;
+
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #999;">暂无数据</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(target => `
+                <tr>
+                    <td style="font-family: monospace; font-weight: 500;">${escapeHtml(target.dst_ip)}</td>
+                    <td>${target.dst_port}</td>
+                    <td>${target.protocol}</td>
+                    <td>${target.service}</td>
+                    <td>${target.attack_count}</td>
+                    <td>${target.attacker_count}</td>
+                </tr>
+            `).join('');
+        }
+
+        // 导出分析报告
+        async function exportAnalysisReport() {
+            try {
+                const response = await fetchWithErrorHandling(
+                    '/api/analysis/export',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            hours: currentAnalysisHours,
+                            format: 'html'
+                        })
+                    },
+                    null,
+                    true,
+                    '正在生成报告...'
+                );
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `analysis_report_${new Date().toISOString().slice(0, 10)}.html`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                showToast('报告导出成功', 'success');
+            } catch (error) {
+                console.error('导出报告失败:', error);
+            }
+        }
+
+        // 当切换到分析标签页时加载数据
+        const originalShowTab = window.showTab;
+        window.showTab = function(tabId) {
+            originalShowTab(tabId);
+            if (tabId === 'analysis') {
+                setTimeout(() => {
+                    loadAnalysisData();
+                }, 100);
+            }
+        };
+    </script>
+</body>
+</html>

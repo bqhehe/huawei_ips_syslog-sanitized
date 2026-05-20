@@ -6,6 +6,8 @@
 
 一个完整的华为防火墙 IPS（入侵防御系统）日志分析、自动响应和可视化监控平台。
 
+![Dashboard Preview](screenshots/dashboard-preview.png)
+
 ## 功能特性
 
 - **Syslog 日志接收** - 监听 UDP 514 端口，实时接收华为防火墙 IPS 告警日志
@@ -46,7 +48,7 @@
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/quinnli23/huawei_ips_syslog-sanitized.git
+git clone https://github.com/bqhehe/huawei_ips_syslog-sanitized.git
 cd huawei_ips_syslog-sanitized
 
 # 2. 配置环境变量

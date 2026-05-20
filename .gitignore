@@ -50,3 +50,24 @@ Thumbs.db
 
 # Cookie 文件
 cookies.txt
+
+# IDE / 编辑器本地配置
+.claude/
+
+# 工具配置（已合并到 pyproject.toml）
+.black
+.flake8
+.isort.cfg
+
+# Spec workflow 模板（开发工具残留）
+.spec-workflow/
+
+# 备份文件
+backups/
+
+# 调试日志
+firebase-debug.log
+
+# nmap 工具（与本项目无关）
+tools/nmap_PC_name.py
+tools/pynamp.py

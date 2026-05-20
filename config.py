@@ -24,7 +24,7 @@ class Config:
     FW_PASSWORD = os.getenv('FW_PASSWORD', '')
 
     # 邮件配置
-    MAIL_HOST = os.getenv('MAIL_HOST', 'smtp.163.com')
+    MAIL_HOST = os.getenv('MAIL_HOST', 'smtp.example.com')
     MAIL_USER = os.getenv('MAIL_USER', 'monitor_user')
     MAIL_PASSWORD = os.getenv('MAIL_PASSWORD', '')
     MAIL_SENDER = os.getenv('MAIL_SENDER', 'monitor@example.com')

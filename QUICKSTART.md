@@ -3,8 +3,8 @@
 ## 1. 解压项目
 
 ```bash
-tar -xzf python_ips_syslog-YYYYMMDD_HHMMSS-sanitized.tar.gz -C /opt/python-code/
-cd /opt/python-code/python_ips_syslog
+tar -xzf ips-syslog-YYYYMMDD_HHMMSS.tar.gz -C /opt/
+cd /opt/python_ips_syslog
 ```
 
 ## 2. 配置环境变量

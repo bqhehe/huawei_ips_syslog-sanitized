@@ -5,7 +5,7 @@ import re
 from IPy import IP
 import socket
 import sys
-data = '192.168.1.1 :  <188>Jul  3 2023 08:15:57 USG6585E_01 %%01IPS/4/TROJAN(l):A trojan horse was detected. (SyslogId=463327, VSys="public", Policy="Permit_Internet", SrcIp=10.0.0.254, DstIp=202.96.128.86, SrcPort=60684, DstPort=53, SrcZone=trust, DstZone=untrust1, User="unknown", Protocol=UDP, Application="DNS", Profile="default", SignName="Mining Pool Domain DNS Request", SignId=505470, EventNum=1, Target=server, Severity=medium, Os=all, Category=Trojan, Role=0, SrcLocation="unknown-zone", DstLocation="GuangZhou", Action=Block)'
+data = '192.168.1.1 :  <188>Jul  3 2023 08:15:57 USG6585E_01 %%01IPS/4/TROJAN(l):A trojan horse was detected. (SyslogId=463327, VSys="public", Policy="Allow_Internet", SrcIp=10.0.0.254, DstIp=203.0.113.1, SrcPort=60684, DstPort=53, SrcZone=trust, DstZone=untrust1, User="unknown", Protocol=UDP, Application="DNS", Profile="default", SignName="Mining Pool Domain DNS Request", SignId=505470, EventNum=1, Target=server, Severity=medium, Os=all, Category=Trojan, Role=0, SrcLocation="unknown-zone", DstLocation="GuangZhou", Action=Block)'
 SignName_list = re.findall(r"SignName=(.*\W+.*)", data)[0].split(',')   
 SignName = SignName_list[0]
 

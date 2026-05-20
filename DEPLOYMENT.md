@@ -87,7 +87,7 @@ sudo git clone <repository-url> python_ips_syslog
 cd python_ips_syslog
 
 # 或直接部署已有代码
-cd /opt/python-code/python_ips_syslog
+cd /opt/ips-syslog
 ```
 
 ### 2. 配置环境
@@ -95,7 +95,7 @@ cd /opt/python-code/python_ips_syslog
 #### 2.1 创建虚拟环境
 
 ```bash
-cd /opt/python-code/python_ips_syslog
+cd /opt/ips-syslog
 python3 -m venv venv
 source venv/bin/activate
 ```
@@ -249,7 +249,7 @@ sudo systemctl enable docker
 #### 2.1 创建配置文件
 
 ```bash
-cd /opt/python-code/python_ips_syslog
+cd /opt/ips-syslog
 cp .env.example .env
 vi .env
 ```
@@ -469,7 +469,7 @@ tail -f data/Att.txt
 
 ```bash
 # 进入虚拟环境（Systemd部署）
-source /opt/python-code/python_ips_syslog/venv/bin/activate
+source /opt/ips-syslog/venv/bin/activate
 
 # 查看当前黑名单
 python -c "from blacklist_manager import blacklist_manager; print(blacklist_manager.list_all())"
